@@ -31,3 +31,8 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 include = ["pytest_automation_report*"]
+
+[project.urls]
+Homepage = "https://github.com/viduroberoi/pytest-html-report-builder"
+Repository = "https://github.com/viduroberoi/pytest-html-report-builder"
+Issues = "https://github.com/viduroberoi/pytest-html-report-builder/issues"
