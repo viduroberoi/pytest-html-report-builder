@@ -29,6 +29,7 @@ jobs:
   publish-testpypi:
     needs: build
     runs-on: ubuntu-latest
+    # No reviewers on the `testpypi` environment means this runs automatically.
     environment: testpypi
     permissions:
       id-token: write
@@ -47,6 +48,8 @@ jobs:
   publish-pypi:
     needs: publish-testpypi
     runs-on: ubuntu-latest
+    # Add required reviewers on the `pypi` environment in GitHub settings
+    # to require a manual approval before this job can publish.
     environment: pypi
     permissions:
       id-token: write
