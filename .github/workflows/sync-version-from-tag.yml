@@ -1,0 +1,57 @@
+name: Sync Version From Tag
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  sync-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out default branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Set version from tag
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import pathlib
+          import re
+          import os
+
+          tag = os.environ["TAG_NAME"]
+          version = tag[1:] if tag.startswith("v") else tag
+          pyproject = pathlib.Path("pyproject.toml")
+          content = pyproject.read_text(encoding="utf-8")
+          updated = re.sub(
+              r'(?m)^version = "[^"]+"$',
+              f'version = "{version}"',
+              content,
+              count=1,
+          )
+          if updated == content:
+              raise SystemExit("Could not update version in pyproject.toml")
+          pyproject.write_text(updated, encoding="utf-8")
+          print(f"Updated pyproject.toml to version {version}")
+          PY
+
+      - name: Commit version bump if needed
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          if git diff --quiet -- pyproject.toml; then
+            echo "No version change needed."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml
+          git commit -m "Sync version to ${TAG_NAME#v}"
+          git push origin "${{ github.event.repository.default_branch }}"
