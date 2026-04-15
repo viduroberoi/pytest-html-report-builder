@@ -14,11 +14,13 @@
 
 ### Dashboard summary
 
-![Dashboard summary preview](assets/report-dashboard-preview.svg)
+Generated from the demo report produced by `tests/test_demo_screenshot.py`.
+
+![Dashboard summary preview](https://raw.githubusercontent.com/viduroberoi/pytest-html-report-builder/main/docs/images/report-summary.png)
 
 ### Failure details with screenshots
 
-![Failure details preview](assets/report-failures-preview.svg)
+![Failure details preview](https://raw.githubusercontent.com/viduroberoi/pytest-html-report-builder/main/docs/images/report-details.png)
 
 ## Installation
 
