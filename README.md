@@ -1,6 +1,6 @@
 # pytest-automation-report
 
-`pytest-automation-report` is a lightweight pytest plugin that creates a self-contained HTML execution report after a test run. The report includes:
+`pytest-automation-report` is a lightweight pytest plugin that creates a self-contained HTML execution report after a test run. It works with plain pytest suites as well as UI suites built on Selenium or Playwright. The report includes:
 
 - summary cards for key test metrics
 - outcome distribution charts
@@ -9,6 +9,16 @@
 - module-level execution breakdown
 - embedded failure screenshots
 - failure details and a complete test result table
+
+## Preview
+
+### Dashboard summary
+
+![Dashboard summary preview](assets/report-dashboard-preview.svg)
+
+### Failure details with screenshots
+
+![Failure details preview](assets/report-failures-preview.svg)
 
 ## Installation
 
@@ -62,16 +72,18 @@ If you prefer local plugin loading during development, you can also enable it ex
 pytest_plugins = ["pytest_automation_report.plugin"]
 ```
 
-## Selenium Screenshot Support
+## UI Screenshot Support
 
 The plugin supports screenshots in two ways:
 
-- automatic capture on test failure when a Selenium-style fixture named `driver`, `browser`, `selenium`, or `webdriver` exposes `get_screenshot_as_base64()` or `get_screenshot_as_png()`
+- automatic capture on test failure from supported Selenium and Playwright fixtures
 - manual screenshot attachment from the test itself through the `automation_report` fixture
 
 ### Automatic failure screenshots
 
-If your test already uses a Selenium WebDriver fixture called `driver`, no extra code is required beyond generating the report:
+Selenium WebDriver fixtures named `driver`, `browser`, `selenium`, or `webdriver` are detected automatically when they expose `get_screenshot_as_base64()` or `get_screenshot_as_png()`.
+
+If your test already uses a Selenium fixture called `driver`, no extra code is required beyond generating the report:
 
 ```python
 def test_checkout(driver):
@@ -80,6 +92,16 @@ def test_checkout(driver):
 ```
 
 When that test fails during the call phase, the plugin will try to capture a screenshot and embed it directly in the HTML report.
+
+Playwright sync fixtures named `page`, `playwright_page`, `context`, or `browser_context` are also supported. For context fixtures, the plugin captures the most recently opened page.
+
+```python
+def test_checkout(page):
+    page.goto("https://example.com/checkout")
+    assert page.get_by_text("Success").is_visible()
+```
+
+When that test fails during the call phase, the plugin will call `page.screenshot(type="png")` and embed the image into the report.
 
 ### Manual screenshot attachment
 
@@ -102,6 +124,15 @@ You can also attach raw bytes:
 
 ```python
 automation_report(image_bytes=driver.get_screenshot_as_png(), name="Current page")
+```
+
+The same manual helper works with Playwright:
+
+```python
+def test_checkout(page, automation_report):
+    page.goto("https://example.com/checkout")
+    automation_report(image_bytes=page.screenshot(type="png"), name="Checkout state")
+    assert page.get_by_text("Success").is_visible()
 ```
 
 ### Helper import option

@@ -190,6 +190,30 @@ class AutomationReportPlugin:
             ):
                 return
 
+        for fixture_name in ("page", "playwright_page"):
+            page = item.funcargs.get(fixture_name)
+            if page is None:
+                continue
+
+            if self._attach_screenshot_from_page(
+                nodeid=item.nodeid,
+                page=page,
+                name=f"Failure Screenshot ({fixture_name})",
+            ):
+                return
+
+        for fixture_name in ("context", "browser_context"):
+            context = item.funcargs.get(fixture_name)
+            if context is None:
+                continue
+
+            if self._attach_screenshot_from_browser_context(
+                nodeid=item.nodeid,
+                context=context,
+                name=f"Failure Screenshot ({fixture_name})",
+            ):
+                return
+
     def _attach_screenshot_from_driver(self, nodeid: str, driver: Any, name: str) -> bool:
         get_base64 = getattr(driver, "get_screenshot_as_base64", None)
         if callable(get_base64):
@@ -209,6 +233,43 @@ class AutomationReportPlugin:
                 return False
             if png_bytes:
                 self.attach_screenshot(nodeid=nodeid, image_bytes=png_bytes, name=name)
+                return True
+
+        return False
+
+    def _attach_screenshot_from_page(self, nodeid: str, page: Any, name: str) -> bool:
+        screenshot = getattr(page, "screenshot", None)
+        if not callable(screenshot):
+            return False
+
+        try:
+            image_bytes = screenshot(type="png")
+        except TypeError:
+            try:
+                image_bytes = screenshot()
+            except Exception:
+                return False
+        except Exception:
+            return False
+
+        if not image_bytes or not isinstance(image_bytes, (bytes, bytearray)):
+            return False
+
+        self.attach_screenshot(nodeid=nodeid, image_bytes=bytes(image_bytes), name=name)
+        return True
+
+    def _attach_screenshot_from_browser_context(self, nodeid: str, context: Any, name: str) -> bool:
+        pages = getattr(context, "pages", None)
+        if pages is None:
+            return False
+
+        try:
+            candidates = list(pages)
+        except TypeError:
+            return False
+
+        for page in reversed(candidates):
+            if self._attach_screenshot_from_page(nodeid=nodeid, page=page, name=name):
                 return True
 
         return False

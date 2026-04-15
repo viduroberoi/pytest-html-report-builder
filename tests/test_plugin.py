@@ -40,6 +40,21 @@ class DummyDriver:
         return self.content_base64
 
 
+class DummyPlaywrightPage:
+    def __init__(self, content_bytes):
+        self.content_bytes = content_bytes
+        self.calls = []
+
+    def screenshot(self, **kwargs):
+        self.calls.append(kwargs)
+        return self.content_bytes
+
+
+class DummyPlaywrightContext:
+    def __init__(self, pages):
+        self.pages = pages
+
+
 def test_build_report_html_includes_chart_sections(tmp_path):
     plugin = AutomationReportPlugin(
         config=DummyConfig(),
@@ -158,3 +173,59 @@ def test_auto_capture_failure_screenshot_from_driver():
     assert len(attachments) == 1
     assert attachments[0]["name"] == "Failure Screenshot (driver)"
     assert attachments[0]["content_base64"] == encoded
+
+
+def test_auto_capture_failure_screenshot_from_playwright_page():
+    plugin = AutomationReportPlugin(
+        config=DummyConfig(),
+        report_path=Path("automation-report.html"),
+        title="Playwright Suite",
+    )
+    page = DummyPlaywrightPage(b"playwright-png")
+    item = SimpleNamespace(
+        nodeid="tests/test_ui.py::test_checkout",
+        funcargs={"page": page},
+    )
+    report = SimpleNamespace(when="call", failed=True)
+    hook = plugin.pytest_runtest_makereport(item, call=None)
+
+    next(hook)
+    try:
+        hook.send(DummyFailedOutcome(report))
+    except StopIteration:
+        pass
+
+    attachments = plugin.results["tests/test_ui.py::test_checkout"].attachments
+    assert len(attachments) == 1
+    assert attachments[0]["name"] == "Failure Screenshot (page)"
+    assert attachments[0]["content_base64"] == base64.b64encode(b"playwright-png").decode("ascii")
+    assert page.calls == [{"type": "png"}]
+
+
+def test_auto_capture_failure_screenshot_from_playwright_context():
+    plugin = AutomationReportPlugin(
+        config=DummyConfig(),
+        report_path=Path("automation-report.html"),
+        title="Playwright Suite",
+    )
+    first_page = DummyPlaywrightPage(b"first-page")
+    last_page = DummyPlaywrightPage(b"last-page")
+    item = SimpleNamespace(
+        nodeid="tests/test_ui.py::test_checkout",
+        funcargs={"context": DummyPlaywrightContext([first_page, last_page])},
+    )
+    report = SimpleNamespace(when="call", failed=True)
+    hook = plugin.pytest_runtest_makereport(item, call=None)
+
+    next(hook)
+    try:
+        hook.send(DummyFailedOutcome(report))
+    except StopIteration:
+        pass
+
+    attachments = plugin.results["tests/test_ui.py::test_checkout"].attachments
+    assert len(attachments) == 1
+    assert attachments[0]["name"] == "Failure Screenshot (context)"
+    assert attachments[0]["content_base64"] == base64.b64encode(b"last-page").decode("ascii")
+    assert first_page.calls == []
+    assert last_page.calls == [{"type": "png"}]
