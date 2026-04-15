@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pytest-html-report-builder"
-version = "0.1.0"
+version = "0.1.2"
 description = "A pytest plugin that generates self-contained HTML automation reports with visual charts."
 readme = "README.md"
 requires-python = ">=3.9"
