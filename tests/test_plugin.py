@@ -90,8 +90,10 @@ def test_build_report_html_includes_chart_sections(tmp_path):
     assert "CI Dashboard" in html
     assert 'data-tab-target="summary"' in html
     assert 'data-tab-target="details"' in html
+    assert 'data-tab-target="screenshots"' in html
     assert 'data-tab-panel="summary"' in html
     assert 'data-tab-panel="details"' in html
+    assert 'data-tab-panel="screenshots"' in html
     assert '<div class="paginated-section" data-pagination-root data-page-size="5">' in html
     assert '<article class="table-card paginated-section" data-pagination-root data-page-size="20">' in html
     assert 'data-page-size="5"' in html
@@ -101,16 +103,25 @@ def test_build_report_html_includes_chart_sections(tmp_path):
     assert 'data-pagination-summary' in html
     assert 'Page ${currentPage} of ${totalPages}' in html
     assert 'Showing ${rangeStart}-${rangeEnd} of ${totalItems} items' in html
+    assert "<th>Traceback</th>" in html
+    assert "View stack trace" in html
+    assert 'data-traceback-toggle' in html
+    assert 'Hide stack trace' in html
+    assert '<tr class="traceback-row"' in html
+    assert '<pre class="traceback-panel">' in html
+    assert '<span class="traceback-empty">—</span>' in html
     assert "Outcome Distribution" in html
     assert "Phase Duration Breakdown" in html
     assert "Top Slowest Tests" in html
     assert "Module Execution Breakdown" in html
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr));" in html
+    assert "@media (max-width: 1100px)" in html
     assert "AssertionError: boom" in html
     assert "teardown exploded" in html
     assert "test_fail" in html
     assert "test_error" in html
     assert html.count('<article class="failure-card" data-pagination-item>') == 2
-    assert html.count("<tr data-pagination-item>") == 4
+    assert html.count('<tbody class="result-group" data-pagination-item>') == 4
 
 
 def test_write_report_creates_file(tmp_path):

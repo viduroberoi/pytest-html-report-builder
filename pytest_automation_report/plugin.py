@@ -375,23 +375,19 @@ class AutomationReportPlugin:
             """
             for item in failure_items
         )
-        result_rows = "".join(
-            f"""
-            <tr data-pagination-item>
-              <td>{escape(item.nodeid)}</td>
-              <td>{status_chip(item.outcome)}</td>
-              <td>{format_seconds(item.phase_durations.get("setup", 0.0))}</td>
-              <td>{format_seconds(item.phase_durations.get("call", 0.0))}</td>
-              <td>{format_seconds(item.phase_durations.get("teardown", 0.0))}</td>
-              <td>{format_seconds(item.total_duration)}</td>
-            </tr>
-            """
-            for item in sorted(results, key=lambda value: (OUTCOME_ORDER.index(value.outcome) if value.outcome in OUTCOME_ORDER else 99, value.nodeid))
+        result_groups = "".join(
+            render_result_group(index, item)
+            for index, item in enumerate(
+                sorted(
+                    results,
+                    key=lambda value: (OUTCOME_ORDER.index(value.outcome) if value.outcome in OUTCOME_ORDER else 99, value.nodeid),
+                )
+            )
         )
-        failure_details_markup = (
+        screenshots_markup = (
             f"""
           <div class="paginated-section" data-pagination-root data-page-size="{FAILURE_DETAILS_PAGE_SIZE}">
-            {render_pagination_toolbar("failure details")}
+            {render_pagination_toolbar("screenshots")}
             <div class="failure-list" data-pagination-items>
               {failure_cards}
             </div>
@@ -404,7 +400,7 @@ class AutomationReportPlugin:
             f"""
           <article class="table-card paginated-section" data-pagination-root data-page-size="{RESULTS_PAGE_SIZE}">
             {render_pagination_toolbar("detailed test results")}
-            <table>
+            <table data-pagination-items>
               <thead>
                 <tr>
                   <th>Node ID</th>
@@ -413,11 +409,10 @@ class AutomationReportPlugin:
                   <th>Call</th>
                   <th>Teardown</th>
                   <th>Total</th>
+                  <th>Traceback</th>
                 </tr>
               </thead>
-              <tbody data-pagination-items>
-                {result_rows}
-              </tbody>
+              {result_groups}
             </table>
           </article>
             """
@@ -433,10 +428,11 @@ class AutomationReportPlugin:
                   <th>Call</th>
                   <th>Teardown</th>
                   <th>Total</th>
+                  <th>Traceback</th>
                 </tr>
               </thead>
               <tbody>
-                <tr><td colspan="6" class="empty-state">No test results were collected.</td></tr>
+                <tr><td colspan="7" class="empty-state">No test results were collected.</td></tr>
               </tbody>
             </table>
           </article>
@@ -569,7 +565,8 @@ class AutomationReportPlugin:
       }}
 
       .chart-grid {{
-        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: start;
       }}
 
       .slow-grid {{
@@ -770,6 +767,48 @@ class AutomationReportPlugin:
         background: white;
       }}
 
+      .traceback-cell {{
+        min-width: 220px;
+      }}
+
+      .result-group[hidden] {{
+        display: none;
+      }}
+
+      .traceback-toggle {{
+        appearance: none;
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.92);
+        color: #0f4c5c;
+        border-radius: 999px;
+        padding: 7px 12px;
+        font: inherit;
+        font-size: 0.9rem;
+        font-weight: 700;
+        cursor: pointer;
+      }}
+
+      .traceback-toggle:hover {{
+        background: var(--surface-alt);
+      }}
+
+      .traceback-row td {{
+        padding: 0 10px 14px;
+        border-bottom: 1px solid var(--border);
+      }}
+
+      .traceback-panel {{
+        margin: 0;
+      }}
+
+      .traceback-row[hidden] {{
+        display: none;
+      }}
+
+      .traceback-empty {{
+        color: var(--muted);
+      }}
+
       .empty-state {{
         color: var(--muted);
         padding: 18px;
@@ -781,6 +820,12 @@ class AutomationReportPlugin:
         width: 100%;
         height: auto;
         display: block;
+      }}
+
+      @media (max-width: 1100px) {{
+        .chart-grid {{
+          grid-template-columns: 1fr;
+        }}
       }}
 
       @media (max-width: 960px) {{
@@ -809,6 +854,7 @@ class AutomationReportPlugin:
       <nav class="tab-nav" aria-label="Report sections">
         <button class="tab-button is-active" type="button" data-tab-target="summary" aria-selected="true">Summary</button>
         <button class="tab-button" type="button" data-tab-target="details" aria-selected="false">Details</button>
+        <button class="tab-button" type="button" data-tab-target="screenshots" aria-selected="false">Screenshots</button>
       </nav>
 
       <section class="tab-panel is-active" data-tab-panel="summary">
@@ -858,13 +904,15 @@ class AutomationReportPlugin:
 
       <section class="tab-panel" data-tab-panel="details">
         <section>
-          <h2 class="section-title">Failure Details</h2>
-          {failure_details_markup}
-        </section>
-
-        <section>
           <h2 class="section-title">Detailed Test Results</h2>
           {detailed_results_markup}
+        </section>
+      </section>
+
+      <section class="tab-panel" data-tab-panel="screenshots">
+        <section>
+          <h2 class="section-title">Failure Details</h2>
+          {screenshots_markup}
         </section>
       </section>
     </main>
@@ -872,6 +920,7 @@ class AutomationReportPlugin:
       const tabButtons = Array.from(document.querySelectorAll('[data-tab-target]'));
       const tabPanels = Array.from(document.querySelectorAll('[data-tab-panel]'));
       const paginationRoots = Array.from(document.querySelectorAll('[data-pagination-root]'));
+      const tracebackToggles = Array.from(document.querySelectorAll('[data-traceback-toggle]'));
 
       for (const button of tabButtons) {{
         button.addEventListener('click', () => {{
@@ -951,6 +1000,25 @@ class AutomationReportPlugin:
         }}
 
         renderPage();
+      }}
+
+      for (const toggle of tracebackToggles) {{
+        toggle.addEventListener('click', () => {{
+          const rowId = toggle.getAttribute('aria-controls');
+          if (!rowId) {{
+            return;
+          }}
+
+          const detailRow = document.getElementById(rowId);
+          if (!detailRow) {{
+            return;
+          }}
+
+          const willExpand = detailRow.hidden;
+          detailRow.hidden = !willExpand;
+          toggle.setAttribute('aria-expanded', willExpand ? 'true' : 'false');
+          toggle.textContent = willExpand ? 'Hide stack trace' : 'View stack trace';
+        }});
       }}
     </script>
   </body>
@@ -1071,6 +1139,56 @@ def render_attachment_gallery(attachments: list[dict[str, str]]) -> str:
         for attachment in attachments
     )
     return f'<div class="attachment-gallery">{cards}</div>'
+
+
+def render_result_group(index: int, item: TestResult) -> str:
+    traceback_id = f"traceback-row-{index}"
+    traceback_cell = render_traceback_toggle(traceback_id, item.longrepr)
+    traceback_row = render_traceback_row(traceback_id, item.longrepr)
+    return f"""
+    <tbody class="result-group" data-pagination-item>
+      <tr>
+        <td>{escape(item.nodeid)}</td>
+        <td>{status_chip(item.outcome)}</td>
+        <td>{format_seconds(item.phase_durations.get("setup", 0.0))}</td>
+        <td>{format_seconds(item.phase_durations.get("call", 0.0))}</td>
+        <td>{format_seconds(item.phase_durations.get("teardown", 0.0))}</td>
+        <td>{format_seconds(item.total_duration)}</td>
+        <td class="traceback-cell">{traceback_cell}</td>
+      </tr>
+      {traceback_row}
+    </tbody>
+    """
+
+
+def render_traceback_toggle(traceback_id: str, longrepr: str) -> str:
+    if not longrepr:
+        return '<span class="traceback-empty">—</span>'
+
+    return f"""
+    <button
+      class="traceback-toggle"
+      type="button"
+      data-traceback-toggle
+      aria-expanded="false"
+      aria-controls="{escape(traceback_id)}"
+    >
+      View stack trace
+    </button>
+    """
+
+
+def render_traceback_row(traceback_id: str, longrepr: str) -> str:
+    if not longrepr:
+        return ""
+
+    return f"""
+    <tr class="traceback-row" id="{escape(traceback_id)}" hidden>
+      <td colspan="7">
+        <pre class="traceback-panel">{escape(longrepr)}</pre>
+      </td>
+    </tr>
+    """
 
 
 def render_pagination_toolbar(section_name: str) -> str:
