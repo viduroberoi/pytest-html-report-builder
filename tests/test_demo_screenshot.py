@@ -67,6 +67,39 @@ def driver():
     return DemoDriver()
 
 
+PASSING_DEMO_CASES = [
+    "login_smoke",
+    "checkout_smoke",
+    "account_profile",
+    "search_results",
+    "wishlist_sync",
+    "inventory_refresh",
+    "billing_summary",
+    "saved_cards",
+    "notifications_panel",
+    "analytics_dashboard",
+    "user_directory",
+    "team_permissions",
+    "audit_history",
+    "theme_preferences",
+    "session_timeout",
+]
+
+FAILING_DEMO_CASES = [
+    "checkout_banner",
+    "payment_modal",
+    "refund_status",
+    "invoice_download",
+    "shipping_estimate",
+    "team_invite",
+]
+
+SKIPPED_DEMO_CASES = [
+    "legacy_import",
+    "beta_feature_gate",
+]
+
+
 def test_demo_selenium_failure_with_screenshot(driver):
     assert "Checkout complete" == "Checkout failed"
 
@@ -77,3 +110,22 @@ def test_demo_manual_attachment(driver, automation_report):
         name="Manual demo screenshot",
     )
     assert False, "Intentional demo failure so the screenshot appears in the failure section"
+
+
+@pytest.mark.parametrize("case_name", PASSING_DEMO_CASES)
+def test_demo_passing_cases(case_name):
+    assert case_name
+
+
+@pytest.mark.parametrize("case_name", FAILING_DEMO_CASES)
+def test_demo_failure_cases(case_name, driver, automation_report):
+    automation_report(
+        image_base64=driver.get_screenshot_as_base64(),
+        name=f"Failure state: {case_name}",
+    )
+    pytest.fail(f"Intentional demo failure for pagination coverage: {case_name}")
+
+
+@pytest.mark.parametrize("case_name", SKIPPED_DEMO_CASES)
+def test_demo_skipped_cases(case_name):
+    pytest.skip(f"Intentional demo skip for report variety: {case_name}")

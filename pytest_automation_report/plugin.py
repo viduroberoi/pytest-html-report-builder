@@ -28,6 +28,8 @@ PHASE_COLORS = {
     "call": "#48c9b0",
     "teardown": "#f5b041",
 }
+FAILURE_DETAILS_PAGE_SIZE = 5
+RESULTS_PAGE_SIZE = 20
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -362,7 +364,7 @@ class AutomationReportPlugin:
         )
         failure_cards = "".join(
             f"""
-            <article class="failure-card">
+            <article class="failure-card" data-pagination-item>
               <header>
                 <span>{status_chip(item.outcome)}</span>
                 <strong>{escape(item.nodeid)}</strong>
@@ -375,7 +377,7 @@ class AutomationReportPlugin:
         )
         result_rows = "".join(
             f"""
-            <tr>
+            <tr data-pagination-item>
               <td>{escape(item.nodeid)}</td>
               <td>{status_chip(item.outcome)}</td>
               <td>{format_seconds(item.phase_durations.get("setup", 0.0))}</td>
@@ -385,6 +387,60 @@ class AutomationReportPlugin:
             </tr>
             """
             for item in sorted(results, key=lambda value: (OUTCOME_ORDER.index(value.outcome) if value.outcome in OUTCOME_ORDER else 99, value.nodeid))
+        )
+        failure_details_markup = (
+            f"""
+          <div class="paginated-section" data-pagination-root data-page-size="{FAILURE_DETAILS_PAGE_SIZE}">
+            {render_pagination_toolbar("failure details")}
+            <div class="failure-list" data-pagination-items>
+              {failure_cards}
+            </div>
+          </div>
+            """
+            if failure_items
+            else '<div class="empty-state">No failures, errors, or unexpected passes were recorded.</div>'
+        )
+        detailed_results_markup = (
+            f"""
+          <article class="table-card paginated-section" data-pagination-root data-page-size="{RESULTS_PAGE_SIZE}">
+            {render_pagination_toolbar("detailed test results")}
+            <table>
+              <thead>
+                <tr>
+                  <th>Node ID</th>
+                  <th>Outcome</th>
+                  <th>Setup</th>
+                  <th>Call</th>
+                  <th>Teardown</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody data-pagination-items>
+                {result_rows}
+              </tbody>
+            </table>
+          </article>
+            """
+            if results
+            else """
+          <article class="table-card">
+            <table>
+              <thead>
+                <tr>
+                  <th>Node ID</th>
+                  <th>Outcome</th>
+                  <th>Setup</th>
+                  <th>Call</th>
+                  <th>Teardown</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td colspan="6" class="empty-state">No test results were collected.</td></tr>
+              </tbody>
+            </table>
+          </article>
+            """
         )
 
         return f"""<!DOCTYPE html>
@@ -619,6 +675,51 @@ class AutomationReportPlugin:
         gap: 16px;
       }}
 
+      .paginated-section {{
+        display: grid;
+        gap: 14px;
+      }}
+
+      .pagination-toolbar {{
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }}
+
+      .pagination-summary,
+      .pagination-status {{
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.92rem;
+      }}
+
+      .pagination-actions {{
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }}
+
+      .pagination-button {{
+        appearance: none;
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.88);
+        color: var(--text);
+        border-radius: 999px;
+        padding: 8px 14px;
+        font: inherit;
+        font-size: 0.92rem;
+        font-weight: 700;
+        cursor: pointer;
+      }}
+
+      .pagination-button:disabled {{
+        opacity: 0.55;
+        cursor: not-allowed;
+      }}
+
       .failure-card {{
         padding: 18px;
       }}
@@ -758,36 +859,19 @@ class AutomationReportPlugin:
       <section class="tab-panel" data-tab-panel="details">
         <section>
           <h2 class="section-title">Failure Details</h2>
-          <div class="failure-list">
-            {failure_cards or '<div class="empty-state">No failures, errors, or unexpected passes were recorded.</div>'}
-          </div>
+          {failure_details_markup}
         </section>
 
         <section>
           <h2 class="section-title">Detailed Test Results</h2>
-          <article class="table-card">
-            <table>
-              <thead>
-                <tr>
-                  <th>Node ID</th>
-                  <th>Outcome</th>
-                  <th>Setup</th>
-                  <th>Call</th>
-                  <th>Teardown</th>
-                  <th>Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {result_rows or '<tr><td colspan="6" class="empty-state">No test results were collected.</td></tr>'}
-              </tbody>
-            </table>
-          </article>
+          {detailed_results_markup}
         </section>
       </section>
     </main>
     <script>
       const tabButtons = Array.from(document.querySelectorAll('[data-tab-target]'));
       const tabPanels = Array.from(document.querySelectorAll('[data-tab-panel]'));
+      const paginationRoots = Array.from(document.querySelectorAll('[data-pagination-root]'));
 
       for (const button of tabButtons) {{
         button.addEventListener('click', () => {{
@@ -803,6 +887,70 @@ class AutomationReportPlugin:
             panel.classList.toggle('is-active', panel.getAttribute('data-tab-panel') === target);
           }}
         }});
+      }}
+
+      for (const root of paginationRoots) {{
+        const itemsParent = root.querySelector('[data-pagination-items]');
+        const items = itemsParent ? Array.from(itemsParent.querySelectorAll('[data-pagination-item]')) : [];
+        const summary = root.querySelector('[data-pagination-summary]');
+        const status = root.querySelector('[data-pagination-status]');
+        const previousButton = root.querySelector('[data-pagination-prev]');
+        const nextButton = root.querySelector('[data-pagination-next]');
+        const requestedSize = Number.parseInt(root.getAttribute('data-page-size') || '20', 10);
+        const pageSize = Number.isFinite(requestedSize) && requestedSize > 0 ? requestedSize : 20;
+        const totalItems = items.length;
+        const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+        let currentPage = 1;
+
+        const renderPage = () => {{
+          const start = (currentPage - 1) * pageSize;
+          const end = start + pageSize;
+
+          items.forEach((item, index) => {{
+            item.hidden = index < start || index >= end;
+          }});
+
+          const rangeStart = totalItems === 0 ? 0 : start + 1;
+          const rangeEnd = totalItems === 0 ? 0 : Math.min(end, totalItems);
+
+          if (summary) {{
+            summary.textContent = totalItems <= pageSize
+              ? `Showing all ${{totalItems}} items`
+              : `Showing ${{rangeStart}}-${{rangeEnd}} of ${{totalItems}} items`;
+          }}
+
+          if (status) {{
+            status.textContent = `Page ${{currentPage}} of ${{totalPages}}`;
+          }}
+
+          if (previousButton) {{
+            previousButton.disabled = currentPage === 1;
+          }}
+
+          if (nextButton) {{
+            nextButton.disabled = currentPage === totalPages;
+          }}
+        }};
+
+        if (previousButton) {{
+          previousButton.addEventListener('click', () => {{
+            if (currentPage > 1) {{
+              currentPage -= 1;
+              renderPage();
+            }}
+          }});
+        }}
+
+        if (nextButton) {{
+          nextButton.addEventListener('click', () => {{
+            if (currentPage < totalPages) {{
+              currentPage += 1;
+              renderPage();
+            }}
+          }});
+        }}
+
+        renderPage();
       }}
     </script>
   </body>
@@ -923,6 +1071,33 @@ def render_attachment_gallery(attachments: list[dict[str, str]]) -> str:
         for attachment in attachments
     )
     return f'<div class="attachment-gallery">{cards}</div>'
+
+
+def render_pagination_toolbar(section_name: str) -> str:
+    return f"""
+    <div class="pagination-toolbar">
+      <p class="pagination-summary" data-pagination-summary aria-live="polite"></p>
+      <div class="pagination-actions">
+        <button
+          class="pagination-button"
+          type="button"
+          data-pagination-prev
+          aria-label="Previous page for {escape(section_name)}"
+        >
+          Previous
+        </button>
+        <span class="pagination-status" data-pagination-status aria-live="polite"></span>
+        <button
+          class="pagination-button"
+          type="button"
+          data-pagination-next
+          aria-label="Next page for {escape(section_name)}"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+    """
 
 
 def render_donut_chart(title: str, segments: list[tuple[str, float, str]]) -> str:

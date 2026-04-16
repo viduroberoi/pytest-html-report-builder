@@ -92,6 +92,15 @@ def test_build_report_html_includes_chart_sections(tmp_path):
     assert 'data-tab-target="details"' in html
     assert 'data-tab-panel="summary"' in html
     assert 'data-tab-panel="details"' in html
+    assert '<div class="paginated-section" data-pagination-root data-page-size="5">' in html
+    assert '<article class="table-card paginated-section" data-pagination-root data-page-size="20">' in html
+    assert 'data-page-size="5"' in html
+    assert 'data-page-size="20"' in html
+    assert 'data-pagination-prev' in html
+    assert 'data-pagination-next' in html
+    assert 'data-pagination-summary' in html
+    assert 'Page ${currentPage} of ${totalPages}' in html
+    assert 'Showing ${rangeStart}-${rangeEnd} of ${totalItems} items' in html
     assert "Outcome Distribution" in html
     assert "Phase Duration Breakdown" in html
     assert "Top Slowest Tests" in html
@@ -100,6 +109,8 @@ def test_build_report_html_includes_chart_sections(tmp_path):
     assert "teardown exploded" in html
     assert "test_fail" in html
     assert "test_error" in html
+    assert html.count('<article class="failure-card" data-pagination-item>') == 2
+    assert html.count("<tr data-pagination-item>") == 4
 
 
 def test_write_report_creates_file(tmp_path):
