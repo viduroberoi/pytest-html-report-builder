@@ -30,6 +30,7 @@ PHASE_COLORS = {
 }
 FAILURE_DETAILS_PAGE_SIZE = 5
 RESULTS_PAGE_SIZE = 20
+SLOWEST_TEST_LIMIT = 10
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -314,15 +315,7 @@ class AutomationReportPlugin:
             "Outcome Distribution",
             [(label.title(), summary["counts"][label], OUTCOME_COLORS[label]) for label in OUTCOME_ORDER if summary["counts"][label] > 0],
         )
-        slowest_chart = render_horizontal_bar_chart(
-            "Top Slowest Tests",
-            [
-                (item.display_name, item.total_duration, OUTCOME_COLORS.get(item.outcome, "#566573"))
-                for item in sorted(results, key=lambda value: value.total_duration, reverse=True)[:10]
-            ],
-            unit="s",
-            formatter=format_seconds,
-        )
+        slowest_results = sorted(results, key=lambda value: (-value.total_duration, value.nodeid))[:SLOWEST_TEST_LIMIT]
         module_chart = render_vertical_bar_chart(
             "Module Execution Breakdown",
             summary["module_durations"][:8],
@@ -360,7 +353,7 @@ class AutomationReportPlugin:
               <td>{format_seconds(item.total_duration)}</td>
             </tr>
             """
-            for item in sorted(results, key=lambda value: value.total_duration, reverse=True)[:10]
+            for item in slowest_results
         )
         failure_cards = "".join(
             f"""
@@ -565,7 +558,7 @@ class AutomationReportPlugin:
       }}
 
       .chart-grid {{
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         align-items: start;
       }}
 
@@ -609,6 +602,17 @@ class AutomationReportPlugin:
       .chart-title {{
         margin: 0 0 14px;
         font-size: 1.05rem;
+      }}
+
+      .chart-card {{
+        display: flex;
+        flex-direction: column;
+      }}
+
+      .chart-visual {{
+        min-height: 240px;
+        display: flex;
+        align-items: center;
       }}
 
       .legend {{
@@ -818,13 +822,27 @@ class AutomationReportPlugin:
 
       .chart-card svg {{
         width: 100%;
-        height: auto;
+        height: 220px;
         display: block;
+      }}
+
+      .chart-visual .empty-state {{
+        width: 100%;
+      }}
+
+      @media (max-width: 1360px) {{
+        .chart-grid {{
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }}
       }}
 
       @media (max-width: 1100px) {{
         .chart-grid {{
           grid-template-columns: 1fr;
+        }}
+
+        .chart-card svg {{
+          height: 240px;
         }}
       }}
 
@@ -865,7 +883,6 @@ class AutomationReportPlugin:
         <section class="chart-grid">
           {donut_chart}
           {phase_chart}
-          {slowest_chart}
           {module_chart}
         </section>
 
@@ -1344,7 +1361,9 @@ def render_chart_card(title: str, chart_markup: str, legend_markup: str) -> str:
     return f"""
     <article class="card chart-card">
       <h2 class="chart-title">{escape(title)}</h2>
-      {chart_markup}
+      <div class="chart-visual">
+        {chart_markup}
+      </div>
       {'<div class="legend">' + legend_markup + '</div>' if legend_markup else ''}
     </article>
     """

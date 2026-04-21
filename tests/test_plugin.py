@@ -112,16 +112,48 @@ def test_build_report_html_includes_chart_sections(tmp_path):
     assert '<span class="traceback-empty">—</span>' in html
     assert "Outcome Distribution" in html
     assert "Phase Duration Breakdown" in html
-    assert "Top Slowest Tests" in html
+    assert "Top Slowest Tests" not in html
     assert "Module Execution Breakdown" in html
-    assert "grid-template-columns: repeat(2, minmax(0, 1fr));" in html
+    assert "grid-template-columns: repeat(3, minmax(0, 1fr));" in html
+    assert "@media (max-width: 1360px)" in html
     assert "@media (max-width: 1100px)" in html
+    assert '<div class="chart-visual">' in html
+    assert "min-height: 240px;" in html
+    assert "height: 220px;" in html
     assert "AssertionError: boom" in html
     assert "teardown exploded" in html
     assert "test_fail" in html
     assert "test_error" in html
     assert html.count('<article class="failure-card" data-pagination-item>') == 2
     assert html.count('<tbody class="result-group" data-pagination-item>') == 4
+
+
+def test_slowest_tests_table_is_top_10_and_sorted_descending(tmp_path):
+    plugin = AutomationReportPlugin(
+        config=DummyConfig(),
+        report_path=tmp_path / "automation-report.html",
+        title="Perf Dashboard",
+    )
+    plugin.started_at = datetime(2026, 4, 12, 5, 30, tzinfo=timezone.utc)
+    plugin.finished_at = datetime(2026, 4, 12, 5, 35, tzinfo=timezone.utc)
+    plugin.collected = 12
+
+    for index in range(12):
+        nodeid = f"tests/test_perf.py::test_case_{index:02d}"
+        plugin.pytest_runtest_logreport(make_report(nodeid, "setup", "passed", 0.01))
+        plugin.pytest_runtest_logreport(make_report(nodeid, "call", "passed", float(index)))
+        plugin.pytest_runtest_logreport(make_report(nodeid, "teardown", "passed", 0.01))
+
+    html = plugin.build_report_html()
+    slowest_section = html.split('<h2 class="chart-title">Slowest Tests</h2>', 1)[1].split("</table>", 1)[0]
+
+    assert "test_case_11" in slowest_section
+    assert "test_case_02" in slowest_section
+    assert "test_case_01" not in slowest_section
+    assert "test_case_00" not in slowest_section
+
+    for earlier, later in zip(range(11, 2, -1), range(10, 1, -1)):
+        assert slowest_section.index(f"test_case_{earlier:02d}") < slowest_section.index(f"test_case_{later:02d}")
 
 
 def test_write_report_creates_file(tmp_path):
