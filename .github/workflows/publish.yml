@@ -27,6 +27,15 @@ jobs:
           version = tag[1:] if tag.startswith("v") else tag
           pyproject = pathlib.Path("pyproject.toml")
           content = pyproject.read_text(encoding="utf-8")
+          match = re.search(r'(?m)^version = "([^"]+)"$', content)
+          if match is None:
+              raise SystemExit("Could not find version in pyproject.toml")
+          current_version = match.group(1)
+
+          if current_version == version:
+              print(f"pyproject.toml already matches release tag version: {version}")
+              raise SystemExit(0)
+
           updated = re.sub(
               r'(?m)^version = "[^"]+"$',
               f'version = "{version}"',
