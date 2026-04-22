@@ -69,45 +69,45 @@ def driver():
 
 
 PASSING_DEMO_CASES = [
-    ("login_smoke", 0.03),
-    ("checkout_smoke", 0.04),
-    ("account_profile", 0.05),
-    ("search_results", 0.03),
-    ("wishlist_sync", 0.04),
-    ("inventory_refresh", 0.06),
-    ("billing_summary", 0.05),
-    ("saved_cards", 0.04),
-    ("notifications_panel", 0.03),
-    ("analytics_dashboard", 0.08),
-    ("user_directory", 0.07),
-    ("team_permissions", 0.06),
-    ("audit_history", 0.09),
-    ("theme_preferences", 0.04),
-    ("session_timeout", 0.05),
+    ("login_smoke", 0.12),
+    ("checkout_smoke", 0.14),
+    ("account_profile", 0.15),
+    ("search_results", 0.13),
+    ("wishlist_sync", 0.14),
+    ("inventory_refresh", 0.16),
+    ("billing_summary", 0.15),
+    ("saved_cards", 0.14),
+    ("notifications_panel", 0.13),
+    ("analytics_dashboard", 0.18),
+    ("user_directory", 0.17),
+    ("team_permissions", 0.16),
+    ("audit_history", 0.19),
+    ("theme_preferences", 0.14),
+    ("session_timeout", 0.15),
 ]
 
 FAILING_DEMO_CASES = [
-    ("checkout_banner", 0.14),
-    ("payment_modal", 0.17),
-    ("refund_status", 0.12),
-    ("invoice_download", 0.16),
-    ("shipping_estimate", 0.20),
-    ("team_invite", 0.15),
+    ("checkout_banner", 0.20),
+    ("payment_modal", 0.23),
+    ("refund_status", 0.18),
+    ("invoice_download", 0.22),
+    ("shipping_estimate", 0.26),
+    ("team_invite", 0.21),
 ]
 
 SKIPPED_DEMO_CASES = [
-    ("legacy_import", 0.03),
-    ("beta_feature_gate", 0.02),
+    ("legacy_import", 0.08),
+    ("beta_feature_gate", 0.07),
 ]
 
 
 def test_demo_selenium_failure_with_screenshot(driver):
-    time.sleep(0.24)
+    time.sleep(0.32)
     assert "Checkout complete" == "Checkout failed"
 
 
 def test_demo_manual_attachment(driver, automation_report):
-    time.sleep(0.18)
+    time.sleep(0.28)
     automation_report(
         image_base64=driver.get_screenshot_as_base64(),
         name="Manual demo screenshot",
@@ -116,8 +116,13 @@ def test_demo_manual_attachment(driver, automation_report):
 
 
 @pytest.mark.parametrize(("case_name", "duration_seconds"), PASSING_DEMO_CASES)
-def test_demo_passing_cases(case_name, duration_seconds):
+def test_demo_passing_cases(case_name, duration_seconds, driver, automation_report):
     time.sleep(duration_seconds)
+    if case_name in {"login_smoke", "analytics_dashboard", "team_permissions"}:
+        automation_report(
+            image_base64=driver.get_screenshot_as_base64(),
+            name=f"Passing state: {case_name}",
+        )
     assert case_name
 
 

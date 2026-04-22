@@ -1347,7 +1347,7 @@ def render_donut_chart(title: str, segments: list[tuple[str, float, str]]) -> st
     <svg viewBox="0 0 200 200" role="img" aria-label="{escape(title)}">
       <circle cx="100" cy="100" r="{radius}" fill="none" stroke="#e5eaee" stroke-width="24"></circle>
       {''.join(circles)}
-      <text x="100" y="86" text-anchor="middle" font-size="12" fill="#5d6d7e" letter-spacing="0.08em">Tests</text>
+      <text x="100" y="86" text-anchor="middle" font-size="14" fill="#5d6d7e" letter-spacing="0.08em">Tests</text>
       <text x="100" y="124" text-anchor="middle" font-size="30" font-weight="700" fill="#1f2d3d">{int(total)}</text>
     </svg>
     """

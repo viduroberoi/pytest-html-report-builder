@@ -18,17 +18,17 @@ def driver():
 
 
 def test_admin_user_list(driver, automation_report):
-    time.sleep(0.07)
+    time.sleep(0.15)
     automation_report(image_base64=driver.get_screenshot_as_base64(), name="Admin user list")
     assert "admin" in "admin user list"
 
 
 def test_admin_role_sync(driver, automation_report):
-    time.sleep(0.1)
+    time.sleep(0.18)
     automation_report(image_base64=driver.get_screenshot_as_base64(), name="Role sync failed")
     pytest.fail("Intentional admin failure for suite coverage")
 
 
 def test_admin_audit_history():
-    time.sleep(0.04)
+    time.sleep(0.08)
     pytest.skip("Intentional skipped admin flow")

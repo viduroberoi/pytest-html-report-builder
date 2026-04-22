@@ -112,7 +112,7 @@ def test_build_report_html_includes_chart_sections(tmp_path):
     assert '<pre class="traceback-panel">' in html
     assert '<span class="traceback-empty">—</span>' in html
     assert "Outcome Distribution" in html
-    assert '<text x="100" y="86" text-anchor="middle" font-size="12" fill="#5d6d7e" letter-spacing="0.08em">Tests</text>' in html
+    assert '<text x="100" y="86" text-anchor="middle" font-size="14" fill="#5d6d7e" letter-spacing="0.08em">Tests</text>' in html
     assert '<text x="100" y="124" text-anchor="middle" font-size="30" font-weight="700" fill="#1f2d3d">' in html
     assert "Phase Duration Breakdown" in html
     assert "Top Slowest Tests" not in html
