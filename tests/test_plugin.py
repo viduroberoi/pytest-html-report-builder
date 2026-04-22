@@ -88,6 +88,7 @@ def test_build_report_html_includes_chart_sections(tmp_path):
     html = plugin.build_report_html()
 
     assert "CI Dashboard" in html
+    assert "Self-contained pytest execution report with runtime metrics, outcome analytics, and detailed failure visibility." in html
     assert 'data-tab-target="summary"' in html
     assert 'data-tab-target="details"' in html
     assert 'data-tab-target="screenshots"' in html
@@ -111,21 +112,49 @@ def test_build_report_html_includes_chart_sections(tmp_path):
     assert '<pre class="traceback-panel">' in html
     assert '<span class="traceback-empty">—</span>' in html
     assert "Outcome Distribution" in html
+    assert '<text x="100" y="86" text-anchor="middle" font-size="12" fill="#5d6d7e" letter-spacing="0.08em">Tests</text>' in html
+    assert '<text x="100" y="124" text-anchor="middle" font-size="30" font-weight="700" fill="#1f2d3d">' in html
     assert "Phase Duration Breakdown" in html
     assert "Top Slowest Tests" not in html
     assert "Module Execution Breakdown" in html
-    assert "grid-template-columns: repeat(3, minmax(0, 1fr));" in html
+    assert "Suite Execution Outcomes" in html
+    assert "Top Failing Modules" in html
+    assert "Common Failure Signatures" in html
+    assert "Skip Reasons" in html
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr));" in html
+    assert "<title>Phase Duration Breakdown</title>" in html
+    assert "<title>Suite Execution Outcomes</title>" in html
     assert "@media (max-width: 1360px)" in html
     assert "@media (max-width: 1100px)" in html
     assert '<div class="chart-visual">' in html
-    assert "min-height: 240px;" in html
-    assert "height: 220px;" in html
+    assert "min-height: 300px;" in html
+    assert "height: 280px;" in html
     assert "AssertionError: boom" in html
     assert "teardown exploded" in html
     assert "test_fail" in html
     assert "test_error" in html
     assert html.count('<article class="failure-card" data-pagination-item>') == 2
     assert html.count('<tbody class="result-group" data-pagination-item>') == 4
+
+
+def test_build_report_html_respects_custom_subtitle(tmp_path):
+    plugin = AutomationReportPlugin(
+        config=DummyConfig(),
+        report_path=tmp_path / "automation-report.html",
+        title="CI Dashboard",
+        subtitle="Nightly smoke and regression summary",
+    )
+    plugin.started_at = datetime.now(timezone.utc)
+    plugin.finished_at = datetime.now(timezone.utc)
+
+    plugin.pytest_runtest_logreport(make_report("tests/test_api.py::test_ok", "setup", "passed", 0.01))
+    plugin.pytest_runtest_logreport(make_report("tests/test_api.py::test_ok", "call", "passed", 0.02))
+    plugin.pytest_runtest_logreport(make_report("tests/test_api.py::test_ok", "teardown", "passed", 0.01))
+
+    html = plugin.build_report_html()
+
+    assert "Nightly smoke and regression summary" in html
+    assert "Self-contained pytest execution report with runtime metrics, outcome analytics, and detailed failure visibility." not in html
 
 
 def test_slowest_tests_table_is_top_10_and_sorted_descending(tmp_path):

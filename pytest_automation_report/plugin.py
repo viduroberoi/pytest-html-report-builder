@@ -31,6 +31,9 @@ PHASE_COLORS = {
 FAILURE_DETAILS_PAGE_SIZE = 5
 RESULTS_PAGE_SIZE = 20
 SLOWEST_TEST_LIMIT = 10
+SUITE_OUTCOME_LIMIT = 8
+INSIGHT_LIST_LIMIT = 5
+DEFAULT_REPORT_SUBTITLE = "Self-contained pytest execution report with runtime metrics, outcome analytics, and detailed failure visibility."
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -49,6 +52,13 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         metavar="TITLE",
         help="Override the HTML report title.",
     )
+    group.addoption(
+        "--automation-report-subtitle",
+        action="store",
+        default=None,
+        metavar="SUBTITLE",
+        help="Override the subtitle text shown below the HTML report title.",
+    )
     parser.addini(
         "automation_report",
         "Default output path for the generated HTML automation report.",
@@ -58,6 +68,11 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         "automation_report_title",
         "Default title for the generated HTML automation report.",
         default="Pytest Automation Report",
+    )
+    parser.addini(
+        "automation_report_subtitle",
+        "Default subtitle text shown below the generated HTML automation report title.",
+        default=DEFAULT_REPORT_SUBTITLE,
     )
 
 
@@ -70,7 +85,8 @@ def pytest_configure(config: pytest.Config) -> None:
         return
 
     title = config.getoption("--automation-report-title") or config.getini("automation_report_title")
-    plugin = AutomationReportPlugin(config=config, report_path=Path(report_path), title=title)
+    subtitle = config.getoption("--automation-report-subtitle") or config.getini("automation_report_subtitle")
+    plugin = AutomationReportPlugin(config=config, report_path=Path(report_path), title=title, subtitle=subtitle)
     config.pluginmanager.register(plugin, "automation-report-plugin")
 
 
@@ -95,10 +111,11 @@ class TestResult:
 
 
 class AutomationReportPlugin:
-    def __init__(self, config: pytest.Config, report_path: Path, title: str) -> None:
+    def __init__(self, config: pytest.Config, report_path: Path, title: str, subtitle: str = DEFAULT_REPORT_SUBTITLE) -> None:
         self.config = config
         self.report_path = report_path
         self.title = title
+        self.subtitle = subtitle
         self.results: dict[str, TestResult] = {}
         self.collected = 0
         self.started_at: datetime | None = None
@@ -327,6 +344,12 @@ class AutomationReportPlugin:
             [(phase.title(), summary["phase_totals"].get(phase, 0.0)) for phase in ["setup", "call", "teardown"]],
             color="#16a085",
             formatter=format_seconds,
+            title_attr="Phase Duration Breakdown",
+        )
+        suite_outcome_chart = render_suite_outcome_chart(
+            "Suite Execution Outcomes",
+            summary["module_outcomes"][:SUITE_OUTCOME_LIMIT],
+            title_attr="Suite Execution Outcomes",
         )
 
         metric_cards = "".join(
@@ -377,6 +400,7 @@ class AutomationReportPlugin:
                 )
             )
         )
+        failure_insights_markup = render_failure_insights(results)
         screenshots_markup = (
             f"""
           <div class="paginated-section" data-pagination-root data-page-size="{FAILURE_DETAILS_PAGE_SIZE}">
@@ -508,6 +532,7 @@ class AutomationReportPlugin:
 
       .metrics,
       .chart-grid,
+      .insights-grid,
       .slow-grid {{
         display: grid;
         gap: 16px;
@@ -558,12 +583,16 @@ class AutomationReportPlugin:
       }}
 
       .chart-grid {{
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         align-items: start;
       }}
 
       .slow-grid {{
         grid-template-columns: 2fr 1fr;
+      }}
+
+      .insights-grid {{
+        grid-template-columns: repeat(3, minmax(0, 1fr));
       }}
 
       .card,
@@ -601,7 +630,11 @@ class AutomationReportPlugin:
 
       .chart-title {{
         margin: 0 0 14px;
-        font-size: 1.05rem;
+        font-size: 1.15rem;
+      }}
+
+      .chart-title[title] {{
+        cursor: help;
       }}
 
       .chart-card {{
@@ -610,9 +643,9 @@ class AutomationReportPlugin:
       }}
 
       .chart-visual {{
-        min-height: 240px;
+        min-height: 300px;
         display: flex;
-        align-items: center;
+        align-items: stretch;
       }}
 
       .legend {{
@@ -634,6 +667,27 @@ class AutomationReportPlugin:
         width: 12px;
         height: 12px;
         border-radius: 999px;
+      }}
+
+      .insight-card {{
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }}
+
+      .insight-title {{
+        margin: 0;
+        font-size: 1rem;
+      }}
+
+      .insight-list {{
+        margin: 0;
+        padding-left: 20px;
+        color: var(--text);
+      }}
+
+      .insight-list li {{
+        margin-bottom: 8px;
       }}
 
       table {{
@@ -822,7 +876,7 @@ class AutomationReportPlugin:
 
       .chart-card svg {{
         width: 100%;
-        height: 220px;
+        height: 280px;
         display: block;
       }}
 
@@ -834,6 +888,10 @@ class AutomationReportPlugin:
         .chart-grid {{
           grid-template-columns: repeat(2, minmax(0, 1fr));
         }}
+
+        .insights-grid {{
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }}
       }}
 
       @media (max-width: 1100px) {{
@@ -841,8 +899,12 @@ class AutomationReportPlugin:
           grid-template-columns: 1fr;
         }}
 
+        .insights-grid {{
+          grid-template-columns: 1fr;
+        }}
+
         .chart-card svg {{
-          height: 240px;
+          height: 260px;
         }}
       }}
 
@@ -857,7 +919,7 @@ class AutomationReportPlugin:
     <main class="container">
       <section class="hero">
         <h1>{escape(self.title)}</h1>
-        <p>Self-contained pytest execution report with runtime metrics, outcome analytics, and detailed failure visibility.</p>
+        <p>{escape(self.subtitle)}</p>
         <div class="sub-meta">
           <span>Suite: {escape(suite_name)}</span>
           <span>Generated: {escape(generated_at.strftime("%Y-%m-%d %H:%M:%S %Z"))}</span>
@@ -884,6 +946,11 @@ class AutomationReportPlugin:
           {donut_chart}
           {phase_chart}
           {module_chart}
+          {suite_outcome_chart}
+        </section>
+
+        <section class="insights-grid">
+          {failure_insights_markup}
         </section>
 
         <section class="slow-grid">
@@ -1050,13 +1117,31 @@ class AutomationReportPlugin:
         }
         durations = [result.total_duration for result in results]
         module_durations = Counter()
+        module_outcome_counts: dict[str, Counter[str]] = {}
         for result in results:
             module_durations[result.module_path] += result.total_duration
+            module_counter = module_outcome_counts.setdefault(result.module_path, Counter())
+            module_counter[normalize_outcome_bucket(result.outcome)] += 1
 
         executed = len(results)
         passed = counts["passed"]
         pass_rate = (passed / executed * 100.0) if executed else 0.0
         ordered_modules = sorted(module_durations.items(), key=lambda item: item[1], reverse=True)
+        ordered_module_outcomes = sorted(
+            (
+                (
+                    module,
+                    module_counter["passed"],
+                    module_counter["failed"],
+                    module_counter["skipped"],
+                    module_counter["error"],
+                    sum(module_counter.values()),
+                )
+                for module, module_counter in module_outcome_counts.items()
+            ),
+            key=lambda item: (item[5], item[2] + item[4], item[0]),
+            reverse=True,
+        )
 
         return {
             "counts": counts,
@@ -1067,6 +1152,7 @@ class AutomationReportPlugin:
             "median_duration": median(durations) if durations else 0.0,
             "phase_totals": phase_totals,
             "module_durations": ordered_modules,
+            "module_outcomes": ordered_module_outcomes,
         }
 
     def _format_timestamp(self, value: datetime | None) -> str:
@@ -1261,8 +1347,8 @@ def render_donut_chart(title: str, segments: list[tuple[str, float, str]]) -> st
     <svg viewBox="0 0 200 200" role="img" aria-label="{escape(title)}">
       <circle cx="100" cy="100" r="{radius}" fill="none" stroke="#e5eaee" stroke-width="24"></circle>
       {''.join(circles)}
-      <text x="100" y="92" text-anchor="middle" font-size="14" fill="#5d6d7e">Tests</text>
-      <text x="100" y="114" text-anchor="middle" font-size="28" font-weight="700" fill="#1f2d3d">{int(total)}</text>
+      <text x="100" y="86" text-anchor="middle" font-size="12" fill="#5d6d7e" letter-spacing="0.08em">Tests</text>
+      <text x="100" y="124" text-anchor="middle" font-size="30" font-weight="700" fill="#1f2d3d">{int(total)}</text>
     </svg>
     """
     return render_chart_card(title, svg, "".join(legends))
@@ -1315,6 +1401,7 @@ def render_vertical_bar_chart(
     *,
     color: str,
     formatter: Callable[[float], str] | None = None,
+    title_attr: str | None = None,
 ) -> str:
     if not data:
         return render_empty_chart(title, "No module or phase data was captured.")
@@ -1337,9 +1424,12 @@ def render_vertical_bar_chart(
         shown = formatter(value) if formatter else f"{value:.2f}"
         bars.append(
             f"""
-            <rect x="{x:.2f}" y="{y:.2f}" width="{bar_width:.2f}" height="{bar_height:.2f}" rx="12" fill="{color}"></rect>
-            <text x="{x + bar_width / 2:.2f}" y="{bottom + 18}" text-anchor="middle" font-size="12" fill="#34495e">{escape(trim_label(label, 12))}</text>
-            <text x="{x + bar_width / 2:.2f}" y="{y - 8:.2f}" text-anchor="middle" font-size="12" fill="#34495e">{escape(shown)}</text>
+            <g>
+              <title>{escape(label)}</title>
+              <rect x="{x:.2f}" y="{y:.2f}" width="{bar_width:.2f}" height="{bar_height:.2f}" rx="12" fill="{color}"></rect>
+              <text x="{x + bar_width / 2:.2f}" y="{bottom + 18}" text-anchor="middle" font-size="12" fill="#34495e">{escape(trim_label(label, 12))}</text>
+              <text x="{x + bar_width / 2:.2f}" y="{y - 8:.2f}" text-anchor="middle" font-size="12" fill="#34495e">{escape(shown)}</text>
+            </g>
             """
         )
         legends.append(legend_item(label, shown, color))
@@ -1350,23 +1440,194 @@ def render_vertical_bar_chart(
       {''.join(bars)}
     </svg>
     """
-    return render_chart_card(title, svg, "".join(legends))
+    return render_chart_card(title, svg, "".join(legends), title_attr=title_attr)
 
 
 def render_empty_chart(title: str, message: str) -> str:
     return render_chart_card(title, f'<div class="empty-state">{escape(message)}</div>', "")
 
 
-def render_chart_card(title: str, chart_markup: str, legend_markup: str) -> str:
+def render_chart_card(title: str, chart_markup: str, legend_markup: str, *, title_attr: str | None = None) -> str:
+    if title_attr and chart_markup.lstrip().startswith("<svg"):
+        svg_open, svg_rest = chart_markup.split(">", 1)
+        chart_markup = f"{svg_open}><title>{escape(title_attr)}</title>{svg_rest}"
     return f"""
     <article class="card chart-card">
       <h2 class="chart-title">{escape(title)}</h2>
-      <div class="chart-visual">
+      <div class="chart-visual"{f' title="{escape(title_attr)}"' if title_attr else ''}>
         {chart_markup}
       </div>
       {'<div class="legend">' + legend_markup + '</div>' if legend_markup else ''}
     </article>
     """
+
+
+def render_suite_outcome_chart(
+    title: str,
+    module_outcomes: list[tuple[str, int, int, int, int, int]],
+    *,
+    title_attr: str | None = None,
+) -> str:
+    if not module_outcomes:
+        return render_empty_chart(title, "No suite-level execution data was captured.")
+
+    width = 760
+    height = 320
+    bottom = 250
+    left = 44
+    chart_width = width - left - 20
+    bar_gap = 18
+    bar_width = max(42.0, (chart_width - (len(module_outcomes) - 1) * bar_gap) / max(len(module_outcomes), 1))
+    bars = []
+    total_passed = 0
+    total_failed = 0
+    total_skipped = 0
+    total_error = 0
+    max_total = max(total for _, _, _, _, _, total in module_outcomes) or 1
+
+    for index, (module, passed, failed, skipped, error, total) in enumerate(module_outcomes):
+        total_passed += passed
+        total_failed += failed
+        total_skipped += skipped
+        total_error += error
+        x = left + index * (bar_width + bar_gap)
+        y = bottom
+        scale = 180 / max_total
+        segments = [
+            ("Passed", passed, OUTCOME_COLORS["passed"]),
+            ("Failed", failed, OUTCOME_COLORS["failed"]),
+            ("Skipped", skipped, OUTCOME_COLORS["skipped"]),
+            ("Error", error, OUTCOME_COLORS["error"]),
+        ]
+        segment_markup = []
+        for label, value, color in segments:
+            if value <= 0:
+                continue
+            seg_height = value * scale
+            y -= seg_height
+            segment_markup.append(
+                f'<rect x="{x:.2f}" y="{y:.2f}" width="{bar_width:.2f}" height="{seg_height:.2f}" rx="6" fill="{color}"></rect>'
+            )
+
+        bars.append(
+            f"""
+            <g>
+              <title>{escape(module)}</title>
+              {''.join(segment_markup)}
+              <text x="{x + bar_width / 2:.2f}" y="{bottom + 18}" text-anchor="middle" font-size="12" fill="#34495e">{escape(trim_label(module, 12))}</text>
+              <text x="{x + bar_width / 2:.2f}" y="{y - 8:.2f}" text-anchor="middle" font-size="12" fill="#34495e">{total}</text>
+            </g>
+            """
+        )
+
+    legend_parts = []
+    if total_passed > 0:
+        legend_parts.append(legend_item("Passed", total_passed, OUTCOME_COLORS["passed"]))
+    if total_failed > 0:
+        legend_parts.append(legend_item("Failed", total_failed, OUTCOME_COLORS["failed"]))
+    if total_skipped > 0:
+        legend_parts.append(legend_item("Skipped", total_skipped, OUTCOME_COLORS["skipped"]))
+    if total_error > 0:
+        legend_parts.append(legend_item("Error", total_error, OUTCOME_COLORS["error"]))
+
+    svg = f"""
+    <svg viewBox="0 0 {width} {height}" role="img" aria-label="{escape(title)}">
+      <line x1="{left}" y1="{bottom}" x2="{width - 10}" y2="{bottom}" stroke="#ccd6dd" stroke-width="2"></line>
+      {''.join(bars)}
+    </svg>
+    """
+    return render_chart_card(title, svg, "".join(legend_parts), title_attr=title_attr)
+
+
+def render_failure_insights(results: list[TestResult]) -> str:
+    failing_modules = Counter()
+    failure_signatures = Counter()
+    skip_reasons = Counter()
+
+    for result in results:
+        bucket = normalize_outcome_bucket(result.outcome)
+        if bucket in {"failed", "error"}:
+            failing_modules[result.module_path] += 1
+            failure_signatures[extract_failure_signature(result.longrepr)] += 1
+        if bucket == "skipped":
+            skip_reasons[extract_skip_reason(result.longrepr)] += 1
+
+    failing_modules_items = [
+        (trim_label(module, 48), count) for module, count in failing_modules.most_common(INSIGHT_LIST_LIMIT)
+    ] or [("No failing modules captured.", 0)]
+    failure_signature_items = [
+        (trim_label(signature, 64), count) for signature, count in failure_signatures.most_common(INSIGHT_LIST_LIMIT)
+    ] or [("No failure signatures captured.", 0)]
+    skip_reason_items = [
+        (trim_label(reason, 64), count) for reason, count in skip_reasons.most_common(INSIGHT_LIST_LIMIT)
+    ] or [("No skip reasons captured.", 0)]
+
+    return "".join(
+        [
+            render_insight_card("Top Failing Modules", failing_modules_items, "failures"),
+            render_insight_card("Common Failure Signatures", failure_signature_items, "occurrences"),
+            render_insight_card("Skip Reasons", skip_reason_items, "skips"),
+        ]
+    )
+
+
+def render_insight_card(title: str, items: list[tuple[str, int]], unit: str) -> str:
+    rows = "".join(
+        f"<li><strong>{escape(str(count))}</strong> {escape(unit)} - {escape(label)}</li>"
+        if count > 0
+        else f"<li>{escape(label)}</li>"
+        for label, count in items
+    )
+    return f"""
+    <article class="table-card insight-card">
+      <h2 class="insight-title">{escape(title)}</h2>
+      <ol class="insight-list">
+        {rows}
+      </ol>
+    </article>
+    """
+
+
+def normalize_outcome_bucket(outcome: str) -> str:
+    if outcome in {"failed", "xpassed"}:
+        return "failed"
+    if outcome == "xfailed":
+        return "skipped"
+    if outcome in {"passed", "skipped", "error"}:
+        return outcome
+    return "error"
+
+
+def extract_failure_signature(longrepr: str) -> str:
+    if not longrepr:
+        return "No traceback captured."
+
+    for raw_line in longrepr.splitlines():
+        line = raw_line.strip()
+        if line.startswith("E   "):
+            return line[4:].strip() or "Failure without message."
+        if line.startswith("E "):
+            return line[2:].strip() or "Failure without message."
+
+    for raw_line in longrepr.splitlines():
+        line = raw_line.strip()
+        if line:
+            return line
+    return "Failure without message."
+
+
+def extract_skip_reason(longrepr: str) -> str:
+    if not longrepr:
+        return "Skipped without reason."
+    marker = "Skipped:"
+    if marker in longrepr:
+        reason = longrepr.split(marker, 1)[1].strip()
+        return reason or "Skipped without reason."
+    for raw_line in longrepr.splitlines():
+        line = raw_line.strip()
+        if line:
+            return line
+    return "Skipped without reason."
 
 
 def legend_item(label: str, value: Any, color: str) -> str:

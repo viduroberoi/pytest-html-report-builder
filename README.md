@@ -14,8 +14,6 @@
 
 ### Dashboard summary
 
-Generated from the demo report produced by `tests/test_demo_screenshot.py`.
-
 ![Dashboard summary preview](https://raw.githubusercontent.com/viduroberoi/pytest-html-report-builder/main/docs/images/report-summary.png)
 
 ### Failure details with screenshots
@@ -44,12 +42,22 @@ pytest \
   --automation-report-title="Nightly Regression Dashboard"
 ```
 
+Customize both title and subtitle:
+
+```bash
+pytest \
+  --automation-report=reports/automation-report.html \
+  --automation-report-title="Nightly Regression Dashboard" \
+  --automation-report-subtitle="UI + API smoke and regression insights"
+```
+
 You can also configure a default output path in `pytest.ini`:
 
 ```ini
 [pytest]
 automation_report = reports/automation-report.html
 automation_report_title = CI Automation Report
+automation_report_subtitle = Self-contained pytest execution report with runtime metrics, outcome analytics, and detailed failure visibility.
 ```
 
 ## What the Report Includes
